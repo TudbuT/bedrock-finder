@@ -535,6 +535,9 @@ fn main() {
 fn pattern(args: &Vec<String>) {
     for (z, arg) in args[2..].iter().enumerate() {
         for (x, c) in arg.chars().enumerate() {
+            if c == '?' || c == 'a' {
+                continue;
+            }
             print!(
                 "{},{},{}:{} ",
                 x,
