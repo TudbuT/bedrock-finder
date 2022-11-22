@@ -1,10 +1,17 @@
-use std::{env, fmt::Display, ops::Add, time::SystemTime, io::{stdout, Write}};
+use std::{
+    env,
+    fmt::Display,
+    io::{stdout, Write},
+    ops::Add,
+    time::SystemTime,
+};
 
 trait JavaShift {
     fn jshr3(self, amount: u32) -> Self;
 }
 
 impl JavaShift for i64 {
+    #[inline]
     fn jshr3(self, amount: u32) -> Self {
         (self as u64 >> amount) as i64
     }
@@ -26,14 +33,17 @@ impl JavaHash for String {
     }
 }
 
+#[inline]
 fn lerp(delta: f32, start: f32, end: f32) -> f32 {
     start + delta * (end - start)
 }
 
+#[inline]
 fn reverse_lerp(value: f32, start: f32, end: f32) -> f32 {
     (value - start) / (end - start)
 }
 
+#[inline]
 fn map(value: f32, old_start: f32, old_end: f32, new_start: f32, new_end: f32) -> f32 {
     lerp(reverse_lerp(value, old_start, old_end), new_start, new_end)
 }
@@ -352,28 +362,30 @@ impl BedrockSupplier {
     ) -> Vec<BlockPos> {
         let mut results = Vec::new();
         let mut sa = unix_millis();
+        let mut lz = -scale;
         for z in -scale..=scale {
-            for x in -scale..=scale {
-                let mut ok = true;
+            'a: for x in -scale..=scale {
                 for condition in conditions.iter() {
                     if !condition.test(self, BlockPos(x, scan_y, z)) {
-                        ok = false;
+                        continue 'a;
                     }
                 }
-                if ok {
-                    results.push(BlockPos(x, scan_y, z));
-                    if log {
-                        eprintln!("\r\x1b[Kfound formation at {} {} {}", x, scan_y, z);
-                    }
-                    if break_on_match {
-                        return results;
-                    }
+                results.push(BlockPos(x, scan_y, z));
+                if log {
+                    eprintln!("\r\x1b[Kfound formation at {} {} {}", x, scan_y, z);
+                }
+                if break_on_match {
+                    return results;
                 }
             }
             if log && unix_millis() - sa >= 500 {
-                eprint!("\r\x1b[Kz = {z}");
+                eprint!(
+                    "\r\x1b[Kz = {z} ({} l/s)",
+                    (z as f32 - lz as f32).abs() * 2.0 / ((unix_millis() - sa) as f32 / 500.0)
+                );
                 let _ = stdout().flush();
                 sa = unix_millis();
+                lz = z;
             }
         }
         results
@@ -461,6 +473,7 @@ impl BedrockCondition {
         }
     }
 
+    #[inline]
     pub fn test(&self, supplier: &mut BedrockSupplier, search_pos: BlockPos) -> bool {
         supplier.test(self.relative_pos + search_pos) ^ !self.is_there
     }
@@ -505,8 +518,12 @@ fn main() {
     let locations = supplier.find(
         conditions,
         false,
-        args[3].parse().expect("invalid scale. please specify the range from spawn in which to search."),
-        args[4].parse().expect("invalid scan_y. plese specify the y level to which your pattern is relative."),
+        args[3]
+            .parse()
+            .expect("invalid scale. please specify the range from spawn in which to search."),
+        args[4]
+            .parse()
+            .expect("invalid scan_y. plese specify the y level to which your pattern is relative."),
         true,
     );
     println!("\r\x1b[K\nFound:");
@@ -518,7 +535,13 @@ fn main() {
 fn pattern(args: &Vec<String>) {
     for (z, arg) in args[2..].iter().enumerate() {
         for (x, c) in arg.chars().enumerate() {
-            print!("{},{},{}:{} ", x, 0, z, if c == '#' || c == 'X' { 1 } else { 0 });
+            print!(
+                "{},{},{}:{} ",
+                x,
+                0,
+                z,
+                if c == '#' || c == 'X' { 1 } else { 0 }
+            );
         }
     }
     println!();
