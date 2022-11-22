@@ -1,4 +1,4 @@
-use std::{env, fmt::Display, ops::Add};
+use std::{env, fmt::Display, ops::Add, time::SystemTime, io::{stdout, Write}};
 
 trait JavaShift {
     fn jshr3(self, amount: u32) -> Self;
@@ -48,6 +48,13 @@ fn block_hash(block: &BlockPos) -> i64 {
         .wrapping_add(l.wrapping_mul(11_i64));
     let l = l >> 16;
     return l;
+}
+
+fn unix_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -344,6 +351,7 @@ impl BedrockSupplier {
         log: bool,
     ) -> Vec<BlockPos> {
         let mut results = Vec::new();
+        let mut sa = unix_millis();
         for z in -scale..=scale {
             for x in -scale..=scale {
                 let mut ok = true;
@@ -355,12 +363,17 @@ impl BedrockSupplier {
                 if ok {
                     results.push(BlockPos(x, scan_y, z));
                     if log {
-                        println!("found formation at {} {} {}", x, scan_y, z);
+                        eprintln!("\r\x1b[Kfound formation at {} {} {}", x, scan_y, z);
                     }
                     if break_on_match {
                         return results;
                     }
                 }
+            }
+            if log && unix_millis() - sa >= 500 {
+                eprint!("\r\x1b[Kz = {z}");
+                let _ = stdout().flush();
+                sa = unix_millis();
             }
         }
         results
@@ -455,8 +468,16 @@ impl BedrockCondition {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 5 {
-        panic!("args: bedrock-finder <seed> <dimension> <scale> <scan_y> <pattern = <x>,<y>,<z>:<'1'|'0'>>");
+    const ARGS: &str = "\nargs (find mode): bedrock-finder <seed> <dimension> <scale> <scan_y> <pattern = <x>,<y>,<z>:<'1'|'0'>>\nargs (pattern mode): bedrock-finder pattern <('#'|'X'|'_'|' ')...>";
+    if args.len() <= 1 {
+        panic!("{}", ARGS);
+    }
+    if args[1] == "pattern" {
+        pattern(&args);
+        return;
+    }
+    if args.len() <= 5 {
+        panic!("{}", ARGS);
     }
     let mut world = World::new(args[1].parse().unwrap_or_else(|_| args[1].jhash() as i64));
     let mut supplier = BedrockSupplier::new(
@@ -488,8 +509,17 @@ fn main() {
         args[4].parse().expect("invalid scan_y. plese specify the y level to which your pattern is relative."),
         true,
     );
-    println!("Found:");
+    println!("\r\x1b[K\nFound:");
     for location in locations {
         println!("  {}", location);
     }
+}
+
+fn pattern(args: &Vec<String>) {
+    for (z, arg) in args[2..].iter().enumerate() {
+        for (x, c) in arg.chars().enumerate() {
+            print!("{},{},{}:{} ", x, 0, z, if c == '#' || c == 'X' { 1 } else { 0 });
+        }
+    }
+    println!();
 }
