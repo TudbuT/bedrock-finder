@@ -482,7 +482,7 @@ impl BedrockCondition {
 fn main() {
     let args: Vec<String> = env::args().collect();
     const ARGS: &str = "\nargs (find mode): bedrock-finder <seed> <dimension> <scale> <scan_y> <pattern = <x>,<y>,<z>:<'1'|'0'>>\nargs (pattern mode): bedrock-finder pattern <('#'|'X'|'_'|' ')...>";
-    if args.len() <= 2 {
+    if args.len() <= 3 {
         panic!("{}", ARGS);
     }
     if args[1] == "pattern" {
