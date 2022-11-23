@@ -1,12 +1,10 @@
 use std::{
     env,
     fmt::Display,
-    io::{stdout, Write},
+    io::Write,
     ops::Add,
     time::SystemTime,
 };
-
-use core::cell::UnsafeCell;
 
 use cust::{launch, prelude::*, stream::Stream, DeviceCopy};
 
@@ -369,13 +367,15 @@ impl BedrockSupplier {
         let mut results: Vec<BlockPos> = Vec::new();
         unsafe {
             static PTX: &str = include_str!("../gpu.ptx");
-            let ctx = cust::quick_init();
+            let _ctx = cust::quick_init();
             let module = Module::from_ptx(PTX, &[]).unwrap();
             let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
             let func = module.get_function("main").unwrap();
             let (_, block_size) = func.suggested_launch_configuration(0, 0.into()).unwrap();
             let grid_size = (scale as u32 + block_size - 1) / block_size;
+            #[allow(unused_mut)]
             let mut r = [BlockPos(0, 0, 0); 1000];
+            #[allow(unused_mut)]
             let mut rlen = [0];
             let args = (
                 [*self].as_slice().as_dbuf().unwrap(),
@@ -405,8 +405,8 @@ impl BedrockSupplier {
                     args.6.as_device_ptr(),
                     args.7.as_device_ptr(),
                 )
-            );
-            stream.synchronize();
+            ).expect("your gpu does not support cuda, please use your cpu (main branch)");
+            let _ = stream.synchronize();
             println!("END {}", unix_millis());
             {
                 let r = &mut r[0] as *mut BlockPos;
