@@ -1,7 +1,6 @@
 use std::{
     env,
     fmt::Display,
-    io::Write,
     ops::Add,
     time::SystemTime,
 };
@@ -516,7 +515,7 @@ fn main() {
         panic!("{}", ARGS);
     }
     let mut world = World::new(args[1].parse().unwrap_or_else(|_| args[1].jhash() as i64));
-    let mut supplier = BedrockSupplier::new(
+    let supplier = BedrockSupplier::new(
         &mut world,
         match args[2].as_str() {
             "nether:roof" => BedrockLocation::NetherRoof,
