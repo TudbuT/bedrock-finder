@@ -1,0 +1,10 @@
+[package]
+name = "bedrock-finder_gpu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cuda_std = "0.2"
+
+[lib]
+crate-type = ["cdylib", "rlib"]

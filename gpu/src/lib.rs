@@ -1,10 +1,18 @@
-use std::{
-    env,
-    fmt::Display,
-    io::{stdout, Write},
-    ops::Add,
-    time::SystemTime,
-};
+#![cfg_attr(
+    target_os = "cuda",
+    no_std,
+    feature(register_attr),
+    register_attr(nvvm_internal)
+)]
+#![no_std]
+
+extern crate alloc;
+
+
+use core::{ops::Add, fmt::Display};
+
+use alloc::fmt;
+use cuda_std::prelude::*;
 
 trait JavaShift {
     fn jshr3(self, amount: u32) -> Self;
@@ -60,18 +68,11 @@ fn block_hash(block: &BlockPos) -> i64 {
     return l;
 }
 
-fn unix_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct BlockPos(i32, i32, i32);
 
 impl Display for BlockPos {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("BlockPos({}, {}, {})", self.0, self.1, self.2))
     }
 }
@@ -104,11 +105,9 @@ trait RandomSplitter {
     type Random: Random;
 
     fn split(&self, block: &BlockPos) -> Self::Random;
-
-    fn split_string(&self, seed: String) -> Self::Random;
 }
 
-pub struct CheckedRandom {
+struct CheckedRandom {
     seed: i64,
 }
 
@@ -155,7 +154,7 @@ impl Random for CheckedRandom {
     }
 }
 
-pub struct Xoroshiro128PlusPlus {
+struct Xoroshiro128PlusPlus {
     seed_lo: i64,
     seed_hi: i64,
 }
@@ -210,7 +209,7 @@ impl Random for Xoroshiro128PlusPlus {
 }
 
 #[derive(Clone, Copy)]
-pub struct CheckedRandomSplitter {
+struct CheckedRandomSplitter {
     seed: i64,
 }
 
@@ -222,15 +221,10 @@ impl RandomSplitter for CheckedRandomSplitter {
         let m = l ^ self.seed;
         Self::Random::new(m)
     }
-
-    fn split_string(&self, seed: String) -> Self::Random {
-        let i = seed.jhash() as i64;
-        Self::Random::new(i ^ self.seed)
-    }
 }
 
 #[derive(Clone, Copy)]
-pub struct XoroSplitter {
+struct XoroSplitter {
     seed_lo: i64,
     seed_hi: i64,
 }
@@ -243,18 +237,9 @@ impl RandomSplitter for XoroSplitter {
         let m = l ^ self.seed_lo;
         Self::Random::new(m, self.seed_hi)
     }
-
-    fn split_string(&self, seed: String) -> Self::Random {
-        let bs = md5::compute(seed.as_bytes()).0;
-        let a0 = [bs[0], bs[1], bs[2], bs[3], bs[4], bs[5], bs[6], bs[7]];
-        let a1 = [bs[8], bs[9], bs[10], bs[11], bs[12], bs[13], bs[14], bs[15]];
-        let seed_lo = i64::from_be_bytes(a0);
-        let seed_hi = i64::from_be_bytes(a1);
-        Self::Random::new(seed_lo ^ self.seed_lo, seed_hi ^ self.seed_hi)
-    }
 }
 
-pub enum MinecraftRandomSplitter {
+enum MinecraftRandomSplitter {
     Xoroshiro128PlusPlus(XoroSplitter),
     CheckedRandom(CheckedRandomSplitter),
 }
@@ -270,20 +255,9 @@ impl MinecraftRandomSplitter {
             }
         }
     }
-
-    pub fn split_string(&self, seed: String) -> MinecraftRandom {
-        match self {
-            MinecraftRandomSplitter::Xoroshiro128PlusPlus(x) => {
-                MinecraftRandom::Xoroshiro128PlusPlus(x.split_string(seed))
-            }
-            MinecraftRandomSplitter::CheckedRandom(x) => {
-                MinecraftRandom::CheckedRandom(x.split_string(seed))
-            }
-        }
-    }
 }
 
-pub enum MinecraftRandom {
+enum MinecraftRandom {
     Xoroshiro128PlusPlus(Xoroshiro128PlusPlus),
     CheckedRandom(CheckedRandom),
 }
@@ -327,18 +301,8 @@ pub struct BedrockSupplier {
 }
 
 impl BedrockSupplier {
-    pub fn new(world: &World, location: BedrockLocation) -> BedrockSupplier {
-        match location.get_info(world) {
-            BedrockInfo(min, max, reverse, random_splitter) => BedrockSupplier {
-                min,
-                max,
-                reverse,
-                random_splitter,
-            },
-        }
-    }
 
-    pub fn test(&mut self, block: BlockPos) -> bool {
+    fn test(&self, block: BlockPos) -> bool {
         let ix = block.1;
         if ix <= self.min {
             return true ^ self.reverse;
@@ -352,18 +316,17 @@ impl BedrockSupplier {
         }
     }
 
-    pub fn find(
-        &mut self,
+    fn find(
+        &self,
         conditions: Vec<BedrockCondition>,
         break_on_match: bool,
         scale: i32,
         scan_y: i32,
-        log: bool,
+        gpu_idx: u32,
     ) -> Vec<BlockPos> {
         let mut results = Vec::new();
-        let mut sa = unix_millis();
-        let mut lz = -scale;
-        for z in -scale..=scale {
+        let z = (gpu_idx as i32 - (scale / 2)) * 2;
+        for z in z..=z+1 {
             'a: for x in -scale..=scale {
                 for condition in conditions.iter() {
                     if !condition.test(self, BlockPos(x, scan_y, z)) {
@@ -371,181 +334,36 @@ impl BedrockSupplier {
                     }
                 }
                 results.push(BlockPos(x, scan_y, z));
-                if log {
-                    eprintln!("\r\x1b[Kfound formation at {} {} {}", x, scan_y, z);
-                }
+                println!("Found: {} (thread: {})", BlockPos(x, scan_y, z), gpu_idx);
                 if break_on_match {
                     return results;
                 }
-            }
-            if log && unix_millis() - sa >= 500 {
-                eprint!(
-                    "\r\x1b[Kz = {z} ({} l/s)",
-                    (z as f32 - lz as f32).abs() * 2.0 / ((unix_millis() - sa) as f32 / 500.0)
-                );
-                let _ = stdout().flush();
-                sa = unix_millis();
-                lz = z;
             }
         }
         results
     }
 }
 
-pub struct World {
-    seed: i64,
-    overworld_random_splitter: XoroSplitter,
-    nether_random_splitter: CheckedRandomSplitter,
-}
-
-impl World {
-    pub fn new(seed: i64) -> World {
-        World {
-            seed,
-            overworld_random_splitter: Xoroshiro128PlusPlus::from_long(seed).next_splitter(),
-            nether_random_splitter: CheckedRandom::from_long(seed).next_splitter(),
-        }
-    }
-
-    pub fn get_seed(&self) -> i64 {
-        self.seed
-    }
-}
-
-struct BedrockInfo(i32, i32, bool, MinecraftRandomSplitter);
-
-pub enum BedrockLocation {
-    NetherRoof,
-    NetherFloor,
-    Overworld,
-}
-
-impl BedrockLocation {
-    fn get_info(self, world: &World) -> BedrockInfo {
-        match self {
-            Self::NetherRoof => BedrockInfo(
-                127 - 5,
-                127,
-                true,
-                MinecraftRandomSplitter::CheckedRandom(
-                    world
-                        .nether_random_splitter
-                        .split_string("minecraft:bedrock_roof".to_owned())
-                        .next_splitter(),
-                ),
-            ),
-            Self::NetherFloor => BedrockInfo(
-                0,
-                5,
-                false,
-                MinecraftRandomSplitter::CheckedRandom(
-                    world
-                        .nether_random_splitter
-                        .split_string("minecraft:bedrock_floor".to_owned())
-                        .next_splitter(),
-                ),
-            ),
-            Self::Overworld => BedrockInfo(
-                -64,
-                -64 + 5,
-                false,
-                MinecraftRandomSplitter::Xoroshiro128PlusPlus(
-                    world
-                        .overworld_random_splitter
-                        .split_string("minecraft:bedrock_floor".to_owned())
-                        .next_splitter(),
-                ),
-            ),
-        }
-    }
-}
-
+#[derive(Clone, Copy)]
 pub struct BedrockCondition {
-    pub relative_pos: BlockPos,
-    pub is_there: bool,
+    relative_pos: BlockPos,
+    is_there: bool,
 }
 
 impl BedrockCondition {
-    pub fn new(relative_pos: BlockPos, is_there: bool) -> BedrockCondition {
-        BedrockCondition {
-            relative_pos,
-            is_there,
-        }
-    }
-
     #[inline]
-    pub fn test(&self, supplier: &mut BedrockSupplier, search_pos: BlockPos) -> bool {
+    fn test(&self, supplier: &BedrockSupplier, search_pos: BlockPos) -> bool {
         supplier.test(self.relative_pos + search_pos) ^ !self.is_there
     }
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    const ARGS: &str = "\nargs (find mode): bedrock-finder <seed> <dimension> <scale> <scan_y> <pattern = <x>,<y>,<z>:<'1'|'0'>>\nargs (pattern mode): bedrock-finder pattern <('#'|'X'|'_'|' ')...>";
-    if args.len() <= 1 {
-        panic!("{}", ARGS);
-    }
-    if args[1] == "pattern" {
-        pattern(&args);
-        return;
-    }
-    if args.len() <= 5 {
-        panic!("{}", ARGS);
-    }
-    let mut world = World::new(args[1].parse().unwrap_or_else(|_| args[1].jhash() as i64));
-    let mut supplier = BedrockSupplier::new(
-        &mut world,
-        match args[2].as_str() {
-            "nether:roof" => BedrockLocation::NetherRoof,
-            "nether:floor" => BedrockLocation::NetherFloor,
-            "overworld" => BedrockLocation::Overworld,
-            _ => panic!("invalid dimension. valid: nether:roof, nether:floor, overworld"),
-        },
-    );
-    let mut conditions = Vec::new();
-    for arg in args[5..].to_owned() {
-        const MSG: &str = "invalid pattern: please provide valid conditions: x,y,z:n where x, y, and z are coordinates and n is 1 if there should be bedrock and 0 if there shouldn't be";
-        let split = arg.split_once(":").expect(MSG);
-        let coords: Vec<i32> = split.0.split(",").map(|x| x.parse().expect(MSG)).collect();
-        if coords.len() != 3 {
-            panic!("{}", MSG);
-        }
-        conditions.push(BedrockCondition::new(
-            BlockPos(coords[0], coords[1], coords[2]),
-            split.1 == "1",
-        ));
-    }
-    let locations = supplier.find(
-        conditions,
-        false,
-        args[3]
-            .parse()
-            .expect("invalid scale. please specify the range from spawn in which to search."),
-        args[4]
-            .parse()
-            .expect("invalid scan_y. plese specify the y level to which your pattern is relative."),
-        true,
-    );
-    println!("\r\x1b[K\nFound:");
-    for location in locations {
-        println!("  {}", location);
-    }
-}
 
-fn pattern(args: &Vec<String>) {
-    for (z, arg) in args[2..].iter().enumerate() {
-        for (x, c) in arg.chars().enumerate() {
-            if c == '?' || c == 'a' {
-                continue;
-            }
-            print!(
-                "{},{},{}:{} ",
-                x,
-                0,
-                z,
-                if c == '#' || c == 'X' { 1 } else { 0 }
-            );
-        }
+#[kernel]
+pub unsafe fn main(supplier: &[BedrockSupplier], conditions: &[BedrockCondition], break_on_match: &[bool], scale: &[i32], scan_y: &[i32], log: &[bool], results: *mut BlockPos, result_len: *mut u32) {
+    let idx = thread::index_1d();
+    let r = supplier[0].find(conditions.into(), break_on_match[0], scale[0], scan_y[0], idx);
+    for (i, item) in r.iter().enumerate() {
+        *results.add(i) = item.to_owned();
     }
-    println!();
+    *result_len = r.len() as u32;
 }

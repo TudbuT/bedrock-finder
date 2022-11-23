@@ -7,4 +7,7 @@ edition = "2021"
 
 [dependencies]
 md5 = "0.7"
-sha2 = "0.10"
+cust = "0.3"
+
+[build-dependencies]
+cuda_builder = "0.3"
