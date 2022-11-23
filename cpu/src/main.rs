@@ -8,7 +8,7 @@ use std::{
 
 use core::cell::UnsafeCell;
 
-use cust::{prelude::*, stream::Stream, launch, DeviceCopy};
+use cust::{launch, prelude::*, stream::Stream, DeviceCopy};
 
 trait JavaShift {
     fn jshr3(self, amount: u32) -> Self;
@@ -375,7 +375,7 @@ impl BedrockSupplier {
             let func = module.get_function("main").unwrap();
             let (_, block_size) = func.suggested_launch_configuration(0, 0.into()).unwrap();
             let grid_size = (scale as u32 + block_size - 1) / block_size;
-            let mut r = [BlockPos(0,0,0); 1000];
+            let mut r = [BlockPos(0, 0, 0); 1000];
             let mut rlen = [0];
             let args = (
                 [*self].as_slice().as_dbuf().unwrap(),
@@ -385,7 +385,7 @@ impl BedrockSupplier {
                 [scan_y].as_slice().as_dbuf().unwrap(),
                 [log].as_slice().as_dbuf().unwrap(),
                 r.as_slice().as_dbuf().unwrap(),
-                rlen.as_slice().as_dbuf().unwrap()
+                rlen.as_slice().as_dbuf().unwrap(),
             );
             println!("START {} {grid_size} {block_size}", unix_millis());
             launch!(
@@ -556,7 +556,7 @@ fn main() {
 }
 
 fn pattern(args: &Vec<String>) {
-    for (z, arg) in args[2..].iter().enumerate() {
+    for (z, arg) in args[3..].iter().enumerate() {
         for (x, c) in arg.chars().enumerate() {
             if c == '?' || c == 'a' {
                 continue;
@@ -564,7 +564,7 @@ fn pattern(args: &Vec<String>) {
             print!(
                 "{},{},{}:{} ",
                 x,
-                0,
+                args[2],
                 z,
                 if c == '#' || c == 'X' { 1 } else { 0 }
             );

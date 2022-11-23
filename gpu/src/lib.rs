@@ -8,8 +8,7 @@
 
 extern crate alloc;
 
-
-use core::{ops::Add, fmt::Display};
+use core::{fmt::Display, ops::Add};
 
 use alloc::fmt;
 use cuda_std::prelude::*;
@@ -301,7 +300,6 @@ pub struct BedrockSupplier {
 }
 
 impl BedrockSupplier {
-
     fn test(&self, block: BlockPos) -> bool {
         let ix = block.1;
         if ix <= self.min {
@@ -326,7 +324,7 @@ impl BedrockSupplier {
     ) -> Vec<BlockPos> {
         let mut results = Vec::new();
         let z = (gpu_idx as i32 - (scale / 2)) * 2;
-        for z in z..=z+1 {
+        for z in z..=z + 1 {
             'a: for x in -scale..=scale {
                 for condition in conditions.iter() {
                     if !condition.test(self, BlockPos(x, scan_y, z)) {
@@ -357,11 +355,25 @@ impl BedrockCondition {
     }
 }
 
-
 #[kernel]
-pub unsafe fn main(supplier: &[BedrockSupplier], conditions: &[BedrockCondition], break_on_match: &[bool], scale: &[i32], scan_y: &[i32], log: &[bool], results: *mut BlockPos, result_len: *mut u32) {
+pub unsafe fn main(
+    supplier: &[BedrockSupplier],
+    conditions: &[BedrockCondition],
+    break_on_match: &[bool],
+    scale: &[i32],
+    scan_y: &[i32],
+    log: &[bool],
+    results: *mut BlockPos,
+    result_len: *mut u32,
+) {
     let idx = thread::index_1d();
-    let r = supplier[0].find(conditions.into(), break_on_match[0], scale[0], scan_y[0], idx);
+    let r = supplier[0].find(
+        conditions.into(),
+        break_on_match[0],
+        scale[0],
+        scan_y[0],
+        idx,
+    );
     for (i, item) in r.iter().enumerate() {
         *results.add(i) = item.to_owned();
     }
