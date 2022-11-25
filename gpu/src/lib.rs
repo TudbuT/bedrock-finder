@@ -68,6 +68,7 @@ fn block_hash(block: &BlockPos) -> i64 {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[repr(C)]
 pub struct BlockPos(i32, i32, i32);
 
 impl Display for BlockPos {
@@ -104,9 +105,11 @@ trait RandomSplitter {
     type Random: Random;
 
     fn split(&self, block: &BlockPos) -> Self::Random;
+
+    fn split_string(&self, seed: String) -> Self::Random;
 }
 
-struct CheckedRandom {
+pub struct CheckedRandom {
     seed: i64,
 }
 
@@ -153,7 +156,7 @@ impl Random for CheckedRandom {
     }
 }
 
-struct Xoroshiro128PlusPlus {
+pub struct Xoroshiro128PlusPlus {
     seed_lo: i64,
     seed_hi: i64,
 }
@@ -208,7 +211,8 @@ impl Random for Xoroshiro128PlusPlus {
 }
 
 #[derive(Clone, Copy)]
-struct CheckedRandomSplitter {
+#[repr(C)]
+pub struct CheckedRandomSplitter {
     seed: i64,
 }
 
@@ -220,10 +224,16 @@ impl RandomSplitter for CheckedRandomSplitter {
         let m = l ^ self.seed;
         Self::Random::new(m)
     }
+
+    fn split_string(&self, seed: String) -> Self::Random {
+        let i = seed.jhash() as i64;
+        Self::Random::new(i ^ self.seed)
+    }
 }
 
 #[derive(Clone, Copy)]
-struct XoroSplitter {
+#[repr(C)]
+pub struct XoroSplitter {
     seed_lo: i64,
     seed_hi: i64,
 }
@@ -236,9 +246,15 @@ impl RandomSplitter for XoroSplitter {
         let m = l ^ self.seed_lo;
         Self::Random::new(m, self.seed_hi)
     }
+
+    fn split_string(&self, _seed: String) -> Self::Random {
+        panic!("tried to split_string")
+    }
 }
 
-enum MinecraftRandomSplitter {
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub enum MinecraftRandomSplitter {
     Xoroshiro128PlusPlus(XoroSplitter),
     CheckedRandom(CheckedRandomSplitter),
 }
@@ -254,9 +270,20 @@ impl MinecraftRandomSplitter {
             }
         }
     }
+
+    pub fn split_string(&self, seed: String) -> MinecraftRandom {
+        match self {
+            MinecraftRandomSplitter::Xoroshiro128PlusPlus(x) => {
+                MinecraftRandom::Xoroshiro128PlusPlus(x.split_string(seed))
+            }
+            MinecraftRandomSplitter::CheckedRandom(x) => {
+                MinecraftRandom::CheckedRandom(x.split_string(seed))
+            }
+        }
+    }
 }
 
-enum MinecraftRandom {
+pub enum MinecraftRandom {
     Xoroshiro128PlusPlus(Xoroshiro128PlusPlus),
     CheckedRandom(CheckedRandom),
 }
@@ -292,6 +319,8 @@ impl MinecraftRandom {
     }
 }
 
+#[derive(Clone, Copy)]
+#[repr(C)]
 pub struct BedrockSupplier {
     min: i32,
     max: i32,
@@ -316,40 +345,37 @@ impl BedrockSupplier {
 
     fn find(
         &self,
-        conditions: Vec<BedrockCondition>,
+        conditions: &[BedrockCondition],
         break_on_match: bool,
         scale: i32,
         scan_y: i32,
         gpu_idx: u32,
-    ) -> Vec<BlockPos> {
-        let mut results = Vec::new();
+    ) {
         let z = (gpu_idx as i32 - (scale / 2)) * 2;
-        for z in z..=z + 1 {
+        for z in z..=(z + 1) {
             'a: for x in -scale..=scale {
                 for condition in conditions.iter() {
                     if !condition.test(self, BlockPos(x, scan_y, z)) {
                         continue 'a;
                     }
                 }
-                results.push(BlockPos(x, scan_y, z));
                 println!("Found: {} (thread: {})", BlockPos(x, scan_y, z), gpu_idx);
                 if break_on_match {
-                    return results;
+                    return;
                 }
             }
         }
-        results
     }
 }
 
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub struct BedrockCondition {
     relative_pos: BlockPos,
     is_there: bool,
 }
 
 impl BedrockCondition {
-    #[inline]
     fn test(&self, supplier: &BedrockSupplier, search_pos: BlockPos) -> bool {
         supplier.test(self.relative_pos + search_pos) ^ !self.is_there
     }
@@ -357,25 +383,18 @@ impl BedrockCondition {
 
 #[kernel]
 pub unsafe fn main(
-    supplier: &[BedrockSupplier],
+    supplier: BedrockSupplier,
     conditions: &[BedrockCondition],
-    break_on_match: &[bool],
-    scale: &[i32],
-    scan_y: &[i32],
-    log: &[bool],
-    results: *mut BlockPos,
-    result_len: *mut u32,
+    break_on_match: bool,
+    scale: i32,
+    scan_y: i32,
 ) {
     let idx = thread::index_1d();
-    let r = supplier[0].find(
-        conditions.into(),
-        break_on_match[0],
-        scale[0],
-        scan_y[0],
+    let r = supplier.find(
+        conditions,
+        break_on_match,
+        scale,
+        scan_y,
         idx,
     );
-    for (i, item) in r.iter().enumerate() {
-        *results.add(i) = item.to_owned();
-    }
-    *result_len = r.len() as u32;
 }

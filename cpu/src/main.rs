@@ -69,6 +69,7 @@ fn unix_millis() -> u64 {
 }
 
 #[derive(Debug, Clone, Copy, DeviceCopy)]
+#[repr(C)]
 pub struct BlockPos(i32, i32, i32);
 
 impl Display for BlockPos {
@@ -211,6 +212,7 @@ impl Random for Xoroshiro128PlusPlus {
 }
 
 #[derive(Clone, Copy, DeviceCopy)]
+#[repr(C)]
 pub struct CheckedRandomSplitter {
     seed: i64,
 }
@@ -231,6 +233,7 @@ impl RandomSplitter for CheckedRandomSplitter {
 }
 
 #[derive(Clone, Copy, DeviceCopy)]
+#[repr(C)]
 pub struct XoroSplitter {
     seed_lo: i64,
     seed_hi: i64,
@@ -256,6 +259,7 @@ impl RandomSplitter for XoroSplitter {
 }
 
 #[derive(Clone, Copy, DeviceCopy)]
+#[repr(C)]
 pub enum MinecraftRandomSplitter {
     Xoroshiro128PlusPlus(XoroSplitter),
     CheckedRandom(CheckedRandomSplitter),
@@ -322,6 +326,7 @@ impl MinecraftRandom {
 }
 
 #[derive(Clone, Copy, DeviceCopy)]
+#[repr(C)]
 pub struct BedrockSupplier {
     min: i32,
     max: i32,
@@ -361,9 +366,9 @@ impl BedrockSupplier {
         break_on_match: bool,
         scale: i32,
         scan_y: i32,
-        log: bool,
+        _log: bool,
     ) -> Vec<BlockPos> {
-        let mut results: Vec<BlockPos> = Vec::new();
+        let results: Vec<BlockPos> = Vec::new();
         unsafe {
             static PTX: &str = include_str!("../gpu.ptx");
             let _ctx = cust::quick_init();
@@ -372,47 +377,27 @@ impl BedrockSupplier {
             let func = module.get_function("main").unwrap();
             let (_, block_size) = func.suggested_launch_configuration(0, 0.into()).unwrap();
             let grid_size = (scale as u32 + block_size - 1) / block_size;
-            #[allow(unused_mut)]
-            let mut r = [BlockPos(0, 0, 0); 1000];
-            #[allow(unused_mut)]
-            let mut rlen = [0];
+            let conditions_slice = conditions.as_slice();
             let args = (
-                [*self].as_slice().as_dbuf().unwrap(),
-                conditions.as_slice().as_dbuf().unwrap(),
-                [break_on_match].as_slice().as_dbuf().unwrap(),
-                [scale].as_slice().as_dbuf().unwrap(),
-                [scan_y].as_slice().as_dbuf().unwrap(),
-                [log].as_slice().as_dbuf().unwrap(),
-                r.as_slice().as_dbuf().unwrap(),
-                rlen.as_slice().as_dbuf().unwrap(),
+                *self,
+                conditions_slice.as_dbuf().unwrap(),
+                break_on_match,
+                scale,
+                scan_y,
             );
             println!("START {} {grid_size} {block_size}", unix_millis());
             launch!(
                 func<<<grid_size, block_size, 0, stream>>>(
-                    args.0.as_device_ptr(),
-                    args.0.len(),
+                    args.0,
                     args.1.as_device_ptr(),
                     args.1.len(),
-                    args.2.as_device_ptr(),
-                    args.2.len(),
-                    args.3.as_device_ptr(),
-                    args.3.len(),
-                    args.4.as_device_ptr(),
-                    args.4.len(),
-                    args.5.as_device_ptr(),
-                    args.5.len(),
-                    args.6.as_device_ptr(),
-                    args.7.as_device_ptr(),
+                    args.2,
+                    args.3,
+                    args.4,
                 )
             ).expect("your gpu does not support cuda, please use your cpu (main branch)");
-            let _ = stream.synchronize();
+            stream.synchronize().expect("cuda error");
             println!("END {}", unix_millis());
-            {
-                let r = &mut r[0] as *mut BlockPos;
-                for i in 0..rlen[0] {
-                    results.push(*r.add(i));
-                }
-            }
         }
         results
     }
@@ -487,6 +472,7 @@ impl BedrockLocation {
 }
 
 #[derive(Clone, Copy, DeviceCopy)]
+#[repr(C)]
 pub struct BedrockCondition {
     pub relative_pos: BlockPos,
     pub is_there: bool,
