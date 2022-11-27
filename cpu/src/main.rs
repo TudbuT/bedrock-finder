@@ -492,7 +492,7 @@ impl BedrockCondition {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    const ARGS: &str = "\nargs (find mode): bedrock-finder <seed> <dimension> <scale> <scan_y> <at_chunk_0> <pattern = <x>,<y>,<z>:<'1'|'0'>>\nargs (pattern mode): bedrock-finder pattern <('#'|'X'|'_'|' ')...>";
+    const ARGS: &str = "\nargs (find mode): bedrock-finder <seed> <dimension> <scale> <scan_y> <at_chunk_0> <pattern = <x>,<y>,<z>:<'1'|'0'>>\nargs (pattern mode): bedrock-finder pattern <x>,<y>,<z> <('#'|'X'|'_'|' ')...>";
     if args.len() <= 3 {
         panic!("{}", ARGS);
     }
@@ -504,8 +504,8 @@ fn main() {
         panic!("{}", ARGS);
     }
     let mut world = World::new(args[1].parse().unwrap_or_else(|_| args[1].jhash() as i64));
-    let supplier = BedrockSupplier::new(
-        &mut world,
+    let mut supplier = BedrockSupplier::new(
+        &world,
         match args[2].as_str() {
             "nether:roof" => BedrockLocation::NetherRoof,
             "nether:floor" => BedrockLocation::NetherFloor,
@@ -513,6 +513,25 @@ fn main() {
             _ => panic!("invalid dimension. valid: nether:roof, nether:floor, overworld"),
         },
     );
+    if env::var("BPRINT").is_ok() {
+        let pos: BlockPos = BlockPos(
+            args[3].parse().expect("bad position"),
+            args[4].parse().expect("bad position"),
+            args[5].parse().expect("bad position"),
+        );
+        for z in pos.2..=(pos.2 + 10) {
+            for x in pos.0..=(pos.0 + 10) {
+                if supplier.test(BlockPos(x, pos.1, z)) {
+                    print!("##");
+                }
+                else {
+                    print!("  ");
+                }
+            }
+            println!();
+        }
+        return;
+    }
     let mut conditions = Vec::new();
     for arg in args[6..].to_owned() {
         const MSG: &str = "invalid pattern: please provide valid conditions: x,y,z:n where x, y, and z are coordinates and n is 1 if there should be bedrock and 0 if there shouldn't be";
@@ -547,6 +566,10 @@ fn main() {
 }
 
 fn pattern(args: &Vec<String>) {
+    let coords: Vec<i32> = args[2].split(",").map(|x| x.parse().expect("invalid offset coordinates: x,y,z")).collect();
+    if coords.len() != 3 {
+        panic!("invalid offset coordinates: x,y,z");
+    }
     for (z, arg) in args[3..].iter().enumerate() {
         for (x, c) in arg.chars().enumerate() {
             if c == '?' || c == 'a' {
@@ -554,9 +577,9 @@ fn pattern(args: &Vec<String>) {
             }
             print!(
                 "{},{},{}:{} ",
-                x,
-                args[2],
-                z,
+                x + coords[0],
+                coords[1],
+                z + coords[2],
                 if c == '#' || c == 'X' { 1 } else { 0 }
             );
         }
