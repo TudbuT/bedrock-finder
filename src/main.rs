@@ -359,12 +359,19 @@ impl BedrockSupplier {
         scale: i32,
         scan_y: i32,
         log: bool,
+        at_chunk_0: bool,
     ) -> Vec<BlockPos> {
         let mut results = Vec::new();
         let mut sa = unix_millis();
         let mut lz = -scale;
         for z in -scale..=scale {
+            if at_chunk_0 && z % 16 != 0 {
+                continue;
+            }
             'a: for x in -scale..=scale {
+                if at_chunk_0 && x % 16 != 0 {
+                    continue;
+                }
                 for condition in conditions.iter() {
                     if !condition.test(self, BlockPos(x, scan_y, z)) {
                         continue 'a;
@@ -481,7 +488,7 @@ impl BedrockCondition {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    const ARGS: &str = "\nargs (find mode): bedrock-finder <seed> <dimension> <scale> <scan_y> <pattern = <x>,<y>,<z>:<'1'|'0'>>\nargs (pattern mode): bedrock-finder pattern <('#'|'X'|'_'|' ')...>";
+    const ARGS: &str = "\nargs (find mode): bedrock-finder <seed> <dimension> <scale> <scan_y> <at_chunk_0> <pattern = <x>,<y>,<z>:<'1'|'0'>>\nargs (pattern mode): bedrock-finder pattern <('#'|'X'|'_'|' ')...>";
     if args.len() <= 3 {
         panic!("{}", ARGS);
     }
@@ -522,7 +529,7 @@ fn main() {
         return;
     }
     let mut conditions = Vec::new();
-    for arg in args[5..].to_owned() {
+    for arg in args[6..].to_owned() {
         const MSG: &str = "invalid pattern: please provide valid conditions: x,y,z:n where x, y, and z are coordinates and n is 1 if there should be bedrock and 0 if there shouldn't be";
         let split = arg.split_once(":").expect(MSG);
         let coords: Vec<i32> = split.0.split(",").map(|x| x.parse().expect(MSG)).collect();
@@ -543,6 +550,9 @@ fn main() {
         args[4]
             .parse()
             .expect("invalid scan_y. plese specify the y level to which your pattern is relative."),
+        args[5]
+            .parse()
+            .expect("invalid at_chunk_0. please specify true or false"),
         true,
     );
     println!("\r\x1b[K\nFound:");
