@@ -361,12 +361,16 @@ impl BedrockSupplier {
                 if at_chunk_0 && x % 16 != 0 {
                     continue;
                 }
+                let mut i = 0;
                 for condition in conditions.iter() {
                     if !condition.test(self, BlockPos(x, scan_y, z)) {
-                        continue 'a;
+                        i += 1;
+                        if i >= 2 {
+                            continue 'a;
+                        }
                     }
                 }
-                println!("Found: {} (thread: {})", BlockPos(x, scan_y, z), gpu_idx);
+                println!("Found: {} (thread: {}, error: {})", BlockPos(x, scan_y, z), gpu_idx, i);
                 if break_on_match {
                     return;
                 }
