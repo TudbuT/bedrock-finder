@@ -350,10 +350,17 @@ impl BedrockSupplier {
         scale: i32,
         scan_y: i32,
         gpu_idx: u32,
+        at_chunk_0: bool,
     ) {
         let z = (gpu_idx as i32 - (scale / 2)) * 2;
         for z in z..=(z + 1) {
+            if at_chunk_0 && z % 16 != 0 {
+                continue;
+            }
             'a: for x in -scale..=scale {
+                if at_chunk_0 && x % 16 != 0 {
+                    continue;
+                }
                 for condition in conditions.iter() {
                     if !condition.test(self, BlockPos(x, scan_y, z)) {
                         continue 'a;
@@ -388,6 +395,7 @@ pub unsafe fn main(
     break_on_match: bool,
     scale: i32,
     scan_y: i32,
+    at_chunk_0: bool,
 ) {
     let idx = thread::index_1d();
     let r = supplier.find(
@@ -396,5 +404,6 @@ pub unsafe fn main(
         scale,
         scan_y,
         idx,
+        at_chunk_0,
     );
 }

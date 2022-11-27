@@ -367,6 +367,7 @@ impl BedrockSupplier {
         scale: i32,
         scan_y: i32,
         _log: bool,
+        at_chunk_0: bool,
     ) -> Vec<BlockPos> {
         let results: Vec<BlockPos> = Vec::new();
         unsafe {
@@ -384,6 +385,7 @@ impl BedrockSupplier {
                 break_on_match,
                 scale,
                 scan_y,
+                at_chunk_0,
             );
             println!("START {} {grid_size} {block_size}", unix_millis());
             launch!(
@@ -394,6 +396,7 @@ impl BedrockSupplier {
                     args.2,
                     args.3,
                     args.4,
+                    args.5,
                 )
             ).expect("your gpu does not support cuda, please use your cpu (main branch)");
             stream.synchronize().expect("cuda error");
@@ -489,7 +492,7 @@ impl BedrockCondition {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    const ARGS: &str = "\nargs (find mode): bedrock-finder <seed> <dimension> <scale> <scan_y> <pattern = <x>,<y>,<z>:<'1'|'0'>>\nargs (pattern mode): bedrock-finder pattern <('#'|'X'|'_'|' ')...>";
+    const ARGS: &str = "\nargs (find mode): bedrock-finder <seed> <dimension> <scale> <scan_y> <at_chunk_0> <pattern = <x>,<y>,<z>:<'1'|'0'>>\nargs (pattern mode): bedrock-finder pattern <('#'|'X'|'_'|' ')...>";
     if args.len() <= 3 {
         panic!("{}", ARGS);
     }
@@ -497,7 +500,7 @@ fn main() {
         pattern(&args);
         return;
     }
-    if args.len() <= 5 {
+    if args.len() <= 6 {
         panic!("{}", ARGS);
     }
     let mut world = World::new(args[1].parse().unwrap_or_else(|_| args[1].jhash() as i64));
@@ -511,7 +514,7 @@ fn main() {
         },
     );
     let mut conditions = Vec::new();
-    for arg in args[5..].to_owned() {
+    for arg in args[6..].to_owned() {
         const MSG: &str = "invalid pattern: please provide valid conditions: x,y,z:n where x, y, and z are coordinates and n is 1 if there should be bedrock and 0 if there shouldn't be";
         let split = arg.split_once(":").expect(MSG);
         let coords: Vec<i32> = split.0.split(",").map(|x| x.parse().expect(MSG)).collect();
@@ -532,6 +535,9 @@ fn main() {
         args[4]
             .parse()
             .expect("invalid scan_y. plese specify the y level to which your pattern is relative."),
+        args[5]
+            .parse()
+            .expect("invalid at_chunk_0. please specify true or false"),
         true,
     );
     println!("\r\x1b[K\nFound:");
