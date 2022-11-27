@@ -503,8 +503,8 @@ fn main() {
     if args.len() <= 6 {
         panic!("{}", ARGS);
     }
-    let mut world = World::new(args[1].parse().unwrap_or_else(|_| args[1].jhash() as i64));
-    let mut supplier = BedrockSupplier::new(
+    let world = World::new(args[1].parse().unwrap_or_else(|_| args[1].jhash() as i64));
+    let supplier = BedrockSupplier::new(
         &world,
         match args[2].as_str() {
             "nether:roof" => BedrockLocation::NetherRoof,
@@ -577,9 +577,9 @@ fn pattern(args: &Vec<String>) {
             }
             print!(
                 "{},{},{}:{} ",
-                x + coords[0],
+                x as i32 + coords[0],
                 coords[1],
-                z + coords[2],
+                z as i32 + coords[2],
                 if c == '#' || c == 'X' { 1 } else { 0 }
             );
         }
