@@ -330,14 +330,14 @@ pub struct BedrockSupplier {
 
 impl BedrockSupplier {
     fn test(&self, block: BlockPos) -> bool {
-        let ix = block.1;
-        if ix <= self.min {
+        let BlockPos(x, y, z) = block;
+        if y <= self.min {
             return true ^ self.reverse;
-        } else if ix >= self.max {
+        } else if y >= self.max {
             return false ^ self.reverse;
         } else {
-            let d = map(ix as f32, self.min as f32, self.max as f32, 1.0, 0.0);
-            let mut random = self.random_splitter.split(&block);
+            let d = map(y as f32, self.min as f32, self.max as f32, 1.0, 0.0);
+            let mut random = self.random_splitter.split(&BlockPos(x, y, z));
             let b = random.next_float();
             return (b < d) ^ self.reverse;
         }
