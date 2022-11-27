@@ -339,14 +339,14 @@ impl BedrockSupplier {
     }
 
     pub fn test(&mut self, block: BlockPos) -> bool {
-        let ix = block.1;
-        if ix <= self.min {
+        let BlockPos(x, y, z) = block;
+        if y <= self.min {
             return true ^ self.reverse;
-        } else if ix >= self.max {
+        } else if y >= self.max {
             return false ^ self.reverse;
         } else {
-            let d = map(ix as f32, self.min as f32, self.max as f32, 1.0, 0.0);
-            let mut random = self.random_splitter.split(&block);
+            let d = map(y as f32, self.min as f32, self.max as f32, 1.0, 0.0);
+            let mut random = self.random_splitter.split(&BlockPos(x, y, z));
             let b = random.next_float();
             return (b < d) ^ self.reverse;
         }
@@ -502,6 +502,25 @@ fn main() {
             _ => panic!("invalid dimension. valid: nether:roof, nether:floor, overworld"),
         },
     );
+    if env::var("BPRINT").is_ok() {
+        let pos: BlockPos = BlockPos(
+            args[3].parse().expect("bad position"),
+            args[4].parse().expect("bad position"),
+            args[5].parse().expect("bad position"),
+        );
+        for z in pos.2..=(pos.2 + 10) {
+            for x in pos.0..=(pos.0 + 10) {
+                if supplier.test(BlockPos(x, pos.1, z)) {
+                    print!("##");
+                }
+                else {
+                    print!("  ");
+                }
+            }
+            println!();
+        }
+        return;
+    }
     let mut conditions = Vec::new();
     for arg in args[5..].to_owned() {
         const MSG: &str = "invalid pattern: please provide valid conditions: x,y,z:n where x, y, and z are coordinates and n is 1 if there should be bedrock and 0 if there shouldn't be";
